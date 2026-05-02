@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的漫畫評論收藏展</title>
+    <style>
+        :root { --primary: #3498db; --bg: #0f1218; --card-bg: #1a1d24; --text: #ecf0f1; }
+        body { font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
+        .container { max-width: 1000px; margin: auto; }
+        
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; flex-wrap: wrap; gap: 10px; }
+        .btn-group { display: flex; gap: 10px; }
+
+        .upload-section { background: #242831; padding: 20px; border-radius: 12px; margin-bottom: 20px; text-align: center; border: 2px dashed #444; }
+        
+        /* 卡片牆佈局 */
+        .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+        
+        .review-card { 
+            background: var(--card-bg); border-radius: 15px; padding: 20px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5); cursor: pointer;
+            transition: transform 0.2s; position: relative; max-height: 400px; overflow: hidden;
+            border: 1px solid #333;
+        }
+        .review-card:hover { transform: translateY(-5px); border: 1.5px solid var(--primary); }
+        .review-card::after {
+            content: ""; position: absolute; bottom: 0; left: 0; width: 100%; height: 60px;
+            background: linear-gradient(transparent, var(--card-bg));
+        }
+        
+        .comic-title { font-size: 1.25rem; font-weight: bold; color: #fff; margin: 0 0 10px 0; border-left: 4px solid var(--primary); padding-left: 10px; }
+        .rating-stars { color: #f1c40f; font-size: 1.1rem; margin-bottom: 10px; }
+        
+        .info-row { font-size: 0.85rem; color: #bdc3c7; margin-bottom: 4px; }
+
+        /* 平台標籤樣式 - 仿圖中的發光邊框 */
+        .platform-tags { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+        .tag { 
+            padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold;
+            background: rgba(0, 0, 0, 0.3); border: 2px solid var(--tag-color, #ccc);
+            color: var(--tag-color, #ccc); text-shadow: 0 0 5px var(--tag-color);
+            box-shadow: inset 0 0 5px var(--tag-color);
+        }
+
+        /* 編輯器中的多選按鈕 */
+        .platform-selector { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 5px; }
+        .platform-option {
+            padding: 6px 12px; border-radius: 6px; cursor: pointer; border: 2px solid #444;
+            font-size: 0.85rem; transition: all 0.2s; background: #242831; color: #888;
+        }
+        .platform-option.selected {
+            border-color: var(--opt-color); color: var(--opt-color);
+            box-shadow: 0 0 8px var(--opt-color);
+        }
+
+        .comment-text { 
+            font-size: 1rem; color: #bdc3c7; line-height: 1.6; white-space: pre-wrap;
+            word-break: break-all; background: #242831; padding: 10px; border-radius: 8px; margin-top: 10px;
+        }
+
+        /* Modal 樣式改為深色系 */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.85); overflow-y: auto; }
+        .modal-content { background-color: #1a1d24; margin: 5% auto; padding: 30px; border-radius: 15px; width: 90%; max-width: 750px; border: 1px solid #333; }
+        .close-btn { font-size: 28px; color: #666; cursor: pointer; }
+
+        .btn { padding: 10px 18px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-secondary { background: #2c3e50; color: white; }
+        .btn-download { background: #27ae60; color: white; }
+        .btn-danger { background: #c0392b; color: white; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>📚 漫畫評論收藏</h1>
+        <div class="btn-group">
+            <button class="btn btn-download" onclick="downloadAllReviews()">📥 下載全部快取</button>
+            <button class="btn btn-danger" onclick="clearGalleryCache()">🗑️ 清除快取</button>
+            <button class="btn btn-primary" onclick="window.location.href='review.html'">＋ 新增評論</button>
+        </div>
+    </div>
+
+    <div class="upload-section">
+        <p>上傳 JSON 檔案同步至本地快取</p>
+        <input type="file" id="filePicker" accept=".json" multiple>
+    </div>
+
+    <div id="gallery" class="gallery-grid"></div>
+    <div id="emptyMsg" class="empty-state" style="text-align: center; margin-top: 50px; color: #555;">目前沒有評論，請上傳檔案。</div>
+</div>
+
+<div id="editModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header" style="display:flex; justify-content:space-between; margin-bottom:20px;">
+            <h2 id="modalTitleDisplay" style="margin:0; color:var(--primary);">評論詳情</h2>
+            <div>
+                <button id="editModeBtn" class="btn btn-secondary" onclick="toggleEditMode()">✏️ 編輯內容</button>
+                <span class="close-btn" onclick="closeModal()" style="margin-left:15px;">&times;</span>
+            </div>
+        </div>
+        
+        <div id="viewModeArea">
+            <h1 id="viewTitle" style="color: #fff; margin-bottom: 5px;"></h1>
+            <div id="viewDetails" style="font-size: 0.95rem; line-height: 1.8; color: #bdc3c7;">
+                <div id="viewAuthor"></div><div id="viewAdapter"></div><div id="viewArtist"></div>
+            </div>
+            <div id="viewPlatforms" class="platform-tags"></div>
+            <div id="viewStars" style="color: #f1c40f; font-size: 1.6rem; margin: 15px 0;"></div>
+            <div id="viewComment" class="comment-text"></div>
+        </div>
+
+        <div id="editModeArea" style="display:none;">
+            <div style="margin-bottom:15px;"><label>漫畫名稱</label><input type="text" id="editTitle" style="width:100%; padding:10px; background:#0f1218; border:1px solid #333; color:white; border-radius:8px;"></div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom:15px;">
+                <div><label>原作</label><input type="text" id="editAuthor" style="width:100%; padding:8px; background:#0f1218; border:1px solid #333; color:white;"></div>
+                <div><label>改編</label><input type="text" id="editAdapter" style="width:100%; padding:8px; background:#0f1218; border:1px solid #333; color:white;"></div>
+                <div><label>繪師</label><input type="text" id="editArtist" style="width:100%; padding:8px; background:#0f1218; border:1px solid #333; color:white;"></div>
+            </div>
+            
+            <!-- 多選平台區域[cite: 3] -->
+            <div style="margin-bottom:15px;">
+                <label>發行平台</label>
+                <div id="platformSelector" class="platform-selector"></div>
+            </div>
+
+            <div style="margin-bottom:15px;"><label>評分 (1-5)</label><input type="number" id="editRating" min="1" max="5" style="width:100%; padding:8px; background:#0f1218; border:1px solid #333; color:white;"></div>
+            <div style="margin-bottom:15px;"><label>私密評論</label><textarea id="editComment" style="width:100%; height:150px; background:#0f1218; border:1px solid #333; color:white; padding:10px;"></textarea></div>
+            
+            <div class="modal-footer"><button class="btn btn-primary" onclick="saveChanges()">✅ 儲存變更</button></div>
+        </div>
+
+        <div class="modal-footer" id="viewModeFooter" style="margin-top:20px;">
+            <button class="btn btn-download" onclick="downloadCurrent()">💾 下載此項 JSON</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 1. 定義平台與代表色[cite: 3]
+    const PLATFORM_CONFIG = {
+        "Ridibooks": "#00a0e9", // 藍色
+        "Kakao": "#ffcd00",    // 黃色
+        "Naver": "#03cf5d",    // 綠色
+        "Bomtoon": "#ff4d6a",  // 粉紅色
+        "Lezhin": "#ed1c24",   // 紅色
+        "Comico": "#e60012"    // 深紅
+    };
+
+    let allReviews = [];
+    let currentEditIndex = -1;
+    let isEditMode = false;
+    let selectedPlatforms = [];
+
+    window.onload = () => {
+        const cachedData = localStorage.getItem('my_review_gallery');
+        if (cachedData) {
+            allReviews = JSON.parse(cachedData);
+            renderGallery();
+        }
+        initPlatformSelector();
+    };
+
+    // 初始化編輯器中的多選按鈕[cite: 3]
+    function initPlatformSelector() {
+        const container = document.getElementById('platformSelector');
+        container.innerHTML = '';
+        Object.keys(PLATFORM_CONFIG).forEach(name => {
+            const opt = document.createElement('div');
+            opt.className = 'platform-option';
+            opt.innerText = name;
+            opt.style.setProperty('--opt-color', PLATFORM_CONFIG[name]);
+            opt.onclick = () => togglePlatformSelection(name, opt);
+            container.appendChild(opt);
+        });
+    }
+
+    function togglePlatformSelection(name, element) {
+        if (selectedPlatforms.includes(name)) {
+            selectedPlatforms = selectedPlatforms.filter(p => p !== name);
+            element.classList.remove('selected');
+        } else {
+            selectedPlatforms.push(name);
+            element.classList.add('selected');
+        }
+    }
+
+    // 渲染卡片牆[cite: 3]
+    function renderGallery() {
+        const gallery = document.getElementById('gallery');
+        gallery.innerHTML = '';
+        if (allReviews.length > 0) {
+            document.getElementById('emptyMsg').style.display = 'none';
+            allReviews.forEach((data, index) => {
+                const card = document.createElement('div');
+                card.className = 'review-card';
+                card.onclick = () => openModal(index);
+                
+                const tags = (data.platforms || []).map(p => 
+                    `<span class="tag" style="--tag-color: ${PLATFORM_CONFIG[p] || '#ccc'}">[${p}]</span>`
+                ).join('');
+
+                card.innerHTML = `
+                    <h3 class="comic-title">${data.title || '未命名'}</h3>
+                    <div class="info-row">✍️ 原作: ${data.author || '-'}</div>
+                    <div class="info-row">🎨 繪師: ${data.artist || '-'}</div>
+                    <div class="platform-tags">${tags}</div>
+                    <div class="rating-stars">${'★'.repeat(data.rating || 0)}${'☆'.repeat(5-(data.rating||0))}</div>
+                `;
+                gallery.appendChild(card);
+            });
+        }
+    }
+
+    function openModal(index) {
+        currentEditIndex = index;
+        const data = allReviews[index];
+        selectedPlatforms = [...(data.platforms || [])];
+
+        document.getElementById('viewTitle').innerText = data.title || '未命名';
+        document.getElementById('viewAuthor').innerText = `✍️ 原作：${data.author || '-'}`;
+        document.getElementById('viewAdapter').innerText = `🎬 改編：${data.adapter || '-'}`;
+        document.getElementById('viewArtist').innerText = `🎨 繪師：${data.artist || '-'}`;
+        document.getElementById('viewComment').innerText = data.comment || '';
+        document.getElementById('viewStars').innerText = '★'.repeat(data.rating || 0);
+        document.getElementById('viewPlatforms').innerHTML = selectedPlatforms.map(p => 
+            `<span class="tag" style="--tag-color: ${PLATFORM_CONFIG[p] || '#ccc'}">[${p}]</span>`
+        ).join('');
+
+        // 更新編輯器狀態
+        document.getElementById('editTitle').value = data.title || '';
+        document.getElementById('editAuthor').value = data.author || '';
+        document.getElementById('editAdapter').value = data.adapter || '';
+        document.getElementById('editArtist').value = data.artist || '';
+        document.getElementById('editRating').value = data.rating || 0;
+        document.getElementById('editComment').value = data.comment || '';
+        
+        // 重新標記已選平台[cite: 3]
+        document.querySelectorAll('.platform-option').forEach(opt => {
+            opt.classList.toggle('selected', selectedPlatforms.includes(opt.innerText));
+        });
+
+        isEditMode = false;
+        toggleUI(false);
+        document.getElementById('editModal').style.display = 'block';
+    }
+
+    function saveChanges() {
+        allReviews[currentEditIndex] = {
+            ...allReviews[currentEditIndex],
+            title: document.getElementById('editTitle').value,
+            author: document.getElementById('editAuthor').value,
+            adapter: document.getElementById('editAdapter').value,
+            artist: document.getElementById('editArtist').value,
+            platforms: selectedPlatforms,
+            rating: parseInt(document.getElementById('editRating').value),
+            comment: document.getElementById('editComment').value,
+            updatedAt: new Date().toLocaleString()
+        };
+        localStorage.setItem('my_review_gallery', JSON.stringify(allReviews));
+        renderGallery();
+        openModal(currentEditIndex);
+    }
+
+    // 通用功能
+    function toggleUI(edit) {
+        document.getElementById('viewModeArea').style.display = edit ? 'none' : 'block';
+        document.getElementById('editModeArea').style.display = edit ? 'block' : 'none';
+        document.getElementById('editModeBtn').innerText = edit ? '📖 檢視' : '✏️ 編輯內容';
+    }
+    function toggleEditMode() { isEditMode = !isEditMode; toggleUI(isEditMode); }
+    function closeModal() { document.getElementById('editModal').style.display = 'none'; }
+    
+    // 檔案處理[cite: 3]
+    filePicker.addEventListener('change', function(e) {
+        Array.from(e.target.files).forEach(file => {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                const data = JSON.parse(ev.target.result);
+                allReviews = allReviews.concat(Array.isArray(data) ? data : [data]);
+                localStorage.setItem('my_review_gallery', JSON.stringify(allReviews));
+                renderGallery();
+            };
+            reader.readAsText(file);
+        });
+    });
+
+    function downloadAllReviews() {
+        const blob = new Blob([localStorage.getItem('my_review_gallery')], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `backup_${new Date().getTime()}.json`;
+        a.click();
+    }
+
+    function downloadCurrent() {
+        const blob = new Blob([JSON.stringify(allReviews[currentEditIndex])], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${allReviews[currentEditIndex].title}.json`;
+        a.click();
+    }
+
+    function clearGalleryCache() { if(confirm('確定清除？')) { localStorage.removeItem('my_review_gallery'); allReviews=[]; renderGallery(); } }
+</script>
+</body>
+</html>

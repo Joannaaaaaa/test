@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全平台漫畫儲值比較</title>
+    <style>
+        :root { --primary: #3498db; --bg: #0f1218; --card-bg: #1a1d24; --text: #ecf0f1; --accent: #27ae60; }
+        body { font-family: 'PingFang TC', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
+        .container { max-width: 1100px; margin: auto; }
+        
+        /* 標籤頁樣式 */
+        .tabs { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+        .tab-btn { padding: 10px 15px; background: #242831; border: none; border-radius: 8px; color: #888; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        .tab-btn.active { background: var(--primary); color: white; box-shadow: 0 0 10px var(--primary); }
+
+        .card { background: var(--card-bg); border-radius: 15px; padding: 25px; border: 1px solid #333; margin-bottom: 20px; }
+        
+        .calc-section { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; background: #0f1218; padding: 20px; border-radius: 12px; margin-bottom: 20px; }
+        input { width: 100%; padding: 12px; background: #1a1d24; border: 1px solid #444; color: white; border-radius: 8px; font-size: 1rem; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.85rem; }
+        th, td { padding: 10px; text-align: center; border-bottom: 1px solid #333; }
+        th { background: #2c3e50; color: #fff; position: sticky; top: 0; }
+        
+        .highlight-best { background: rgba(39, 174, 96, 0.2) !important; color: #2ecc71 !important; font-weight: bold; border: 1px solid var(--accent); }
+        .platform-label { font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; margin-left: 5px; }
+        .web-label { background: #2980b9; color: white; }
+        .app-label { background: #8e44ad; color: white; }
+
+        .result-info { padding: 15px; background: var(--accent); color: white; border-radius: 8px; font-weight: bold; margin-top: 15px; text-align: center; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>💳 全平台儲值最優解</h1>
+    
+    <!-- 平台切換標籤 -->
+    <div class="tabs">
+        <button class="tab-btn active" onclick="showGroup('ridi')">RIDI (Web/App/優儲)</button>
+        <button class="tab-btn" onclick="showGroup('naver')">Naver Webtoon (Web/App)</button>
+        <button class="tab-btn" onclick="showGroup('kakao')">Kakao Page (含收藏券)</button>
+        <button class="tab-btn" onclick="showGroup('bom_kr')">韓 Bomtoon</button>
+        <button class="tab-btn" onclick="showGroup('bom_tw')">台 Bomtoon</button>
+        <button class="tab-btn" onclick="showGroup('tw_webtoon')">台 Webtoon</button>
+    </div>
+
+    <!-- 計算輸入區 -->
+    <div class="calc-section">
+        <div>
+            <label id="unitA_label">預計「購買」部數</label>
+            <input type="number" id="unitA" placeholder="0" oninput="runGlobalCalc()">
+        </div>
+        <div>
+            <label id="unitB_label">預計「租借」部數</label>
+            <input type="number" id="unitB" placeholder="0" oninput="runGlobalCalc()">
+        </div>
+    </div>
+
+    <div class="card" id="mainCard">
+        <h2 id="groupTitle">RIDI 方案比較</h2>
+        <table id="dataTable">
+            <thead>
+                <tr id="tableHead"></tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+        <div id="summary" class="result-info" style="display:none;"></div>
+    </div>
+</div>
+
+<script>
+    // 依據 Excel 內容整理的全資料
+    const DATA_GROUPS = {
+        ridi: {
+            title: "RIDI 方案比較",
+            unitA: "購買 (500P)", unitB: "租借 (300P)",
+            costA: 500, costB: 300,
+            plans: [
+                // Web 方案
+                { name: "RIDI 2000", total: 2060, twd: 43, type: "Web" },
+                { name: "RIDI 30000", total: 31200, twd: 640, type: "Web" },
+                // 優儲方案
+                { name: "優儲 2000", total: 2120, twd: 43, type: "優儲" },
+                { name: "優儲 30000", total: 32400, twd: 640, type: "優儲" },
+                // App 方案
+                { name: "App 5000", total: 5000, twd: 120, type: "App" },
+                { name: "App 30000", total: 30000, twd: 790, type: "App" }
+            ]
+        },
+        naver: {
+            title: "Naver Webtoon (Cookie)",
+            unitA: "購買 (5C)", unitB: "租借 (3C)",
+            costA: 5, costB: 3,
+            plans: [
+                { name: "Web 100", total: 100, twd: 214, type: "Web" },
+                { name: "App 100", total: 100, twd: 290, type: "App" }
+            ]
+        },
+        kakao: {
+            title: "Kakao Page (Cash/券)",
+            unitA: "購買 (450C)", unitB: "租借 (270C)",
+            costA: 450, costB: 270,
+            plans: [
+                { name: "Cash 10000", total: 10000, twd: 290, type: "App" },
+                { name: "收藏券 30張", total: 13500, twd: 450, type: "券" }
+            ]
+        },
+        bom_kr: {
+            title: "韓版 Bomtoon (Coin)",
+            unitA: "購買 (3C)", unitB: "租借 (2C)",
+            costA: 3, costB: 2,
+            plans: [
+                { name: "Web 100", total: 200, twd: 853, type: "Web" },
+                { name: "特惠 100", total: 200, twd: 423, type: "特惠" }
+            ]
+        },
+        bom_tw: {
+            title: "台版 Bomtoon",
+            unitA: "購買 (3C)", unitB: "租借 (2C)",
+            costA: 3, costB: 2,
+            plans: [
+                { name: "150+70", total: 220, twd: 786, type: "Web" },
+                { name: "特惠 150", total: 290, twd: 788, type: "特惠" }
+            ]
+        },
+        tw_webtoon: {
+            title: "台版 Webtoon",
+            unitA: "購買 (5代幣)", unitB: "租借 (無)",
+            costA: 5, costB: 0,
+            plans: [
+                { name: "1330+330", total: 1660, twd: 3990, type: "App" }
+            ]
+        }
+    };
+
+    let currentGroup = 'ridi';
+
+    function showGroup(groupId) {
+        currentGroup = groupId;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        event.target.classList.add('active');
+        
+        const group = DATA_GROUPS[groupId];
+        document.getElementById('groupTitle').innerText = group.title;
+        document.getElementById('unitA_label').innerText = `預計「${group.unitA}」`;
+        document.getElementById('unitB_label').innerText = `預計「${group.unitB}」`;
+        
+        renderTable();
+    }
+
+    function renderTable() {
+        const group = DATA_GROUPS[currentGroup];
+        const head = document.getElementById('tableHead');
+        const body = document.getElementById('tableBody');
+        
+        head.innerHTML = `<th>方案名稱</th><th>實際得點</th><th>台幣金額</th><th>每單位點數成本</th>`;
+        body.innerHTML = '';
+        
+        group.plans.forEach(plan => {
+            const tr = document.createElement('tr');
+            const cpp = (plan.twd / plan.total).toFixed(4);
+            tr.innerHTML = `
+                <td>${plan.name} <span class="platform-label ${plan.type === 'Web'?'web-label':'app-label'}">${plan.type}</span></td>
+                <td>${plan.total}</td>
+                <td>$${plan.twd}</td>
+                <td>${cpp}</td>
+            `;
+            body.appendChild(tr);
+        });
+        runGlobalCalc();
+    }
+
+    function runGlobalCalc() {
+        const group = DATA_GROUPS[currentGroup];
+        const a = parseInt(document.getElementById('unitA').value) || 0;
+        const b = parseInt(document.getElementById('unitB').value) || 0;
+        const totalNeeded = (a * group.costA) + (b * group.costB);
+        
+        if (totalNeeded === 0) {
+            document.getElementById('summary').style.display = 'none';
+            return;
+        }
+
+        let bestPlan = null;
+        let minPrice = Infinity;
+
+        // 尋找最划算方案
+        group.plans.forEach(plan => {
+            if (plan.total >= totalNeeded) {
+                if (plan.twd < minPrice) {
+                    minPrice = plan.twd;
+                    bestPlan = plan;
+                }
+            }
+        });
+
+        const summary = document.getElementById('summary');
+        summary.style.display = 'block';
+        if (bestPlan) {
+            summary.innerHTML = `本次需求 ${totalNeeded} 單位。最划算選擇：${bestPlan.name} ($${bestPlan.twd})`;
+        } else {
+            summary.innerHTML = `需求量較大，建議重複儲存最高額度方案。`;
+        }
+    }
+
+    window.onload = () => showGroup('ridi');
+</script>
+</body>
+</html>

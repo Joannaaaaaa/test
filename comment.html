@@ -1,0 +1,478 @@
+<!-- <!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webtoon & Ridibooks 評論觀測站</title>
+    <style>
+        :root { --primary: #3498db; --bg: #0f1218; --card-bg: #1a1d24; --text: #ecf0f1; --best-green: #27ae60; --reply-gold: #f1c40f; --dislike-red: #e74c3c; }
+        body { font-family: 'PingFang TC', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
+        .container { max-width: 800px; margin: auto; }
+        .nav { margin-bottom: 20px; }
+        .nav a { color: var(--primary); text-decoration: none; font-weight: bold; }
+        .search-box { background: var(--card-bg); padding: 20px; border-radius: 12px; border: 1px solid #333; margin-bottom: 20px; }
+        .search-box input { width: 100%; padding: 12px; background: #0f1218; border: 1px solid #444; color: white; border-radius: 8px; box-sizing: border-box; }
+        .comment-card { background: var(--card-bg); border-radius: 15px; padding: 20px; margin-bottom: 20px; position: relative; border: 1px solid #333; transition: 0.3s; }
+        .reply-card { border-left: 4px solid var(--reply-gold); background: rgba(241, 196, 15, 0.05); margin-left: 20px; }
+        .best-badge { position: absolute; top: -10px; left: -10px; background: var(--best-green); color: white; padding: 4px 12px; border-radius: 6px; font-weight: bold; font-size: 0.8rem; box-shadow: 0 0 10px rgba(39, 174, 96, 0.5); }
+        .user-info { font-size: 0.9rem; color: var(--primary); font-weight: bold; margin-bottom: 10px; }
+        .platform-tag { font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; margin-left: 8px; vertical-align: middle; }
+        .wt-tag { background: #00d564; color: black; }
+        .ridi-tag { background: #1e9eff; color: white; }
+        .content { font-size: 1.05rem; line-height: 1.6; white-space: pre-wrap; margin-bottom: 15px; }
+        .footer-metrics { display: flex; gap: 20px; font-size: 0.85rem; color: #7f8c8d; border-top: 1px solid #333; padding-top: 10px; }
+        .date { margin-left: auto; }
+        .reply-hint { font-size: 0.8rem; color: var(--reply-gold); margin-bottom: 8px; }
+        #status-summary { color: #27ae60; font-size: 1.1rem; margin-top: 10px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="nav"><a href="#">← 返回主頁</a></div>
+    <div class="search-box">
+        <label style="display:block; margin-bottom:8px; font-size:0.9rem;">輸入搜尋目標 (使用者名稱或遮蔽ID)</label>
+        <input type="text" id="targetUserId" placeholder="例如: Joaaaa999 或 kmin..." onchange="fetchAndFilter()">
+    </div>
+    
+    <div id="status" style="text-align:center; color:#7f8c8d; margin-bottom:20px;">
+        <div>請輸入目標開始搜尋</div>
+        <div id="status-summary"></div>
+    </div>
+
+    <div id="commentList"></div>
+</div>
+
+<script>
+    // ridi 的評論還沒處理
+    const bookIdQueue = [
+        { id: "4328000427", platform: "ridi" },
+        { id: "5536000076", platform: "ridi" },
+        { id: "webtoon_822931_91", platform: "naver" },
+        { id: "w_6938_73", platform: "webtoon" },
+        { id: "w_4259_129", platform: "webtoon" }
+
+    ];
+
+    function getMetrics(c, platform) {
+        let likes = 0;
+        let dislikes = 0;
+        let replies = 0;
+        if (platform === 'webtoon' || platform === 'naver') {
+            likes = c.reactions?.[0]?.emotions?.find(e => e.emotionId === 'like')?.count || 0;
+            dislikes = c.reactions?.[0]?.emotions?.find(e => e.emotionId === 'dislike')?.count || 0;
+            replies = c.childPostCount || 0;
+        } else if (platform === 'ridi') {
+            likes = c.like_count || 0;
+            replies = c.reply_count || 0;
+            dislikes = 0; // Ridi 無此欄位
+        }
+        return { likes, dislikes, replies };
+    }
+
+    async function fetchAndFilter() {
+        const targetSearch = document.getElementById('targetUserId').value.trim();
+        if (!targetSearch) return alert("請輸入搜尋目標");
+
+        const listContainer = document.getElementById('commentList');
+        const statusText = document.querySelector('#status div:first-child');
+        const statusSummary = document.getElementById('status-summary');
+        
+        listContainer.innerHTML = '';
+        statusSummary.innerHTML = '';
+        
+        let totalFound = 0;
+        let totalLikes = 0;
+        let totalReplies = 0;
+
+        const updateUIStats = () => {
+            statusSummary.innerHTML = `累積讚數: ${totalLikes} | 累積回覆/被回覆數: ${totalReplies}`;
+        };
+
+        for (const item of bookIdQueue) {
+            let offset = 0;
+            let hasMore = true;
+            let lastPostId = "";
+            let limit = 400; 
+
+            while (hasMore) {
+                statusText.innerHTML = `🔍 正在搜尋 <b>${item.platform}</b> 話次: ${item.id}...`;
+                try {
+                    const url = `http://localhost:3000/get-comments?bookId=${item.id}&limit=${limit}&platform=${item.platform}&offsetPostId=${lastPostId}&offset=${offset}`;
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    let comments = [];
+
+                    if (item.platform === 'webtoon' || item.platform === 'naver') {
+                        comments = data.result?.posts || [];
+                        if (comments.length > 0) {
+                            lastPostId = comments[comments.length - 1].id;
+                            hasMore = (comments.length === limit);
+                        } else { hasMore = false; }
+                    } else if (item.platform === 'ridi') {
+                        comments = data.serial_comment?.comments || [];
+                        hasMore = (comments.length === limit); 
+                    }
+                    
+                    // 1. 找出目標發布的主留言
+                    const filtered = comments.filter(c => {
+                        const userName = (item.platform === 'webtoon' || item.platform === 'naver') ? c.createdBy?.name : c.user_id;
+                        return userName && (userName.startsWith(targetSearch) || userName === targetSearch);
+                    });
+
+                    filtered.forEach(c => {
+                        const m = getMetrics(c, item.platform);
+                        totalLikes += m.likes;
+                        totalReplies += m.replies;
+                    });
+                    
+                    totalFound += filtered.length;
+                    renderComments(filtered, item, listContainer);
+                    updateUIStats();
+                    
+                    // 2. 深入處理回覆 (Webtoon/Naver 專用)
+                    if (item.platform === 'webtoon' || item.platform === 'naver') {
+                        const matchedPostIds = filtered.map(c => c.id);
+
+                        for (const post of comments) {
+                            if (post.childPostCount > 0 && post.depth === 1) {
+                                const replyUrl = `http://localhost:3000/get-replies?postId=${post.id}&limit=100&bookId=${item.id}&platform=${item.platform}`;
+                                const replyRes = await fetch(replyUrl);
+                                const replyData = await replyRes.json();
+                                const allReplies = replyData.result?.posts || [];
+
+                                // A. 搜尋「我在別人的留言下」的回覆
+                                const myReplies = allReplies.filter(r => {
+                                    const name = r.createdBy?.name || "";
+                                    return (name.startsWith(targetSearch) && !matchedPostIds.includes(post.id));
+                                });
+
+                                if (myReplies.length > 0) {
+                                    renderComments([post], item, listContainer); 
+                                    myReplies.forEach(r => {
+                                        const m = getMetrics(r, item.platform);
+                                        totalLikes += m.likes;
+                                        totalReplies += m.replies;
+                                    });
+                                    totalFound += myReplies.length;
+                                    renderComments(myReplies, item, listContainer, post.body); 
+                                    updateUIStats();
+                                }
+
+                                // B. 搜尋「別人回覆我」的留言 (恢復這段邏輯)
+                                const isMyMainPost = matchedPostIds.includes(post.id);
+                                if (isMyMainPost) {
+                                    const othersReplies = allReplies.filter(r => {
+                                        const name = r.createdBy?.name || "";
+                                        return !name.startsWith(targetSearch); 
+                                    });
+                                    if (othersReplies.length > 0) {
+                                        totalFound += othersReplies.length;
+                                        renderComments(othersReplies, item, listContainer, post.body);
+                                        updateUIStats();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (hasMore) {
+                        offset += limit;
+                        await new Promise(r => setTimeout(r, 1000));
+                    }
+                } catch (e) {
+                    console.error(e);
+                    hasMore = false;
+                }
+            }
+        }
+        statusText.innerHTML = `✅ 搜尋結束，共找到 ${totalFound} 則相關評論。`;
+    }
+
+    function renderComments(list, item, container, parentBody = null) {
+        list.forEach(c => {
+            const card = document.createElement('div');
+            card.className = 'comment-card' + (parentBody ? ' reply-card' : '');
+            
+            const isWTorNaver = (item.platform === 'webtoon' || item.platform === 'naver');
+            const isBest = isWTorNaver ? (c.isTop || c.isPinned) : c.is_best;
+            const name = isWTorNaver ? c.createdBy?.name : c.user_id;
+            const body = isWTorNaver ? c.body : c.content;
+            const date = new Date(isWTorNaver ? c.createdAt : c.created).toLocaleString();
+            
+            const metrics = getMetrics(c, item.platform);
+
+            card.innerHTML = `
+                ${isBest ? '<div class="best-badge">BEST</div>' : ''}
+                ${parentBody ? `<div class="reply-hint">⤴ 回覆留言：「${parentBody.substring(0, 15)}...」</div>` : ''}
+                <div class="user-info">👤 ${name} <span class="platform-tag ${isWTorNaver ? 'wt-tag' : 'ridi-tag'}">${item.platform}</span></div>
+                <div class="content">${body}</div>
+                <div class="footer-metrics">
+                    <div class="metric-item">👍 ${metrics.likes}</div>
+                    ${isWTorNaver ? `<div class="metric-item">👎 ${metrics.dislikes}</div>` : ''}
+                    <div class="metric-item">💬 ${metrics.replies}</div>
+                    <div class="date">🕒 ${date}</div>
+                </div>
+            `;
+            container.appendChild(card);
+        });
+    }
+</script>
+</body>
+</html> -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webtoon & Ridibooks 評論觀測站</title>
+    <style>
+        :root { --primary: #3498db; --bg: #0f1218; --card-bg: #1a1d24; --text: #ecf0f1; --best-green: #27ae60; --reply-gold: #f1c40f; --dislike-red: #e74c3c; }
+        body { font-family: 'PingFang TC', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
+        .container { max-width: 800px; margin: auto; }
+        .nav { margin-bottom: 20px; }
+        .nav a { color: var(--primary); text-decoration: none; font-weight: bold; }
+        .search-box { background: var(--card-bg); padding: 20px; border-radius: 12px; border: 1px solid #333; margin-bottom: 20px; text-align: center; }
+        .btn-search { background: var(--primary); color: white; border: none; padding: 12px 30px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 1rem; }
+        .comment-card { background: var(--card-bg); border-radius: 15px; padding: 20px; margin-bottom: 20px; position: relative; border: 1px solid #333; transition: 0.3s; }
+        .reply-card { border-left: 4px solid var(--reply-gold); background: rgba(241, 196, 15, 0.05); margin-left: 20px; }
+        .best-badge { position: absolute; top: -10px; left: -10px; background: var(--best-green); color: white; padding: 4px 12px; border-radius: 6px; font-weight: bold; font-size: 0.8rem; box-shadow: 0 0 10px rgba(39, 174, 96, 0.5); }
+        .user-info { font-size: 0.9rem; color: var(--primary); font-weight: bold; margin-bottom: 10px; }
+        .platform-tag { font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; margin-left: 8px; vertical-align: middle; }
+        .wt-tag { background: #00d564; color: black; }
+        .ridi-tag { background: #1e9eff; color: white; }
+        .content { font-size: 1.05rem; line-height: 1.6; white-space: pre-wrap; margin-bottom: 15px; }
+        .footer-metrics { display: flex; gap: 20px; font-size: 0.85rem; color: #7f8c8d; border-top: 1px solid #333; padding-top: 10px; }
+        .date { margin-left: auto; }
+        .reply-hint { font-size: 0.8rem; color: var(--reply-gold); margin-bottom: 8px; }
+        #status-summary { color: #27ae60; font-size: 1.1rem; margin-top: 10px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="nav"><a href="#">← 返回主頁</a></div>
+    <div class="search-box">
+        <button class="btn-search" onclick="fetchAndFilter()">開始觀測指定目標</button>
+        <div style="font-size: 0.8rem; color: #7f8c8d; margin-top: 10px;">目標：Ridi(xzg)、Naver(joa)、Webtoon(Joa)</div>
+    </div>
+    
+    <div id="status" style="text-align:center; color:#7f8c8d; margin-bottom:20px;">
+        <div>點擊按鈕開始同步數據</div>
+        <div id="status-summary"></div>
+    </div>
+
+    <div id="commentList"></div>
+</div>
+
+<script>
+    // 這裡將 targetName 依照平台寫死
+    const bookIdQueue = [
+        { id: "4328000427", platform: "ridi", targetName: "xzg" },
+        { id: "5536000076", platform: "ridi", targetName: "xzg" },
+        { id: "webtoon_822931_91", platform: "naver", targetName: "joa" },
+        { id: "w_6938_73", platform: "webtoon", targetName: "Joa" },
+        { id: "w_4259_129", platform: "webtoon", targetName: "Joa" }
+    ];
+
+    function getMetrics(c, platform) {
+        let likes = 0;
+        let dislikes = 0;
+        let replies = 0;
+        if (platform === 'webtoon' || platform === 'naver') {
+            likes = c.reactions?.[0]?.emotions?.find(e => e.emotionId === 'like')?.count || 0;
+            dislikes = c.reactions?.[0]?.emotions?.find(e => e.emotionId === 'dislike')?.count || 0;
+            replies = c.childPostCount || 0;
+        } else if (platform === 'ridi') {
+            likes = c.like_count || 0;
+            replies = c.reply_count || 0;
+            dislikes = 0;
+        }
+        return { likes, dislikes, replies };
+    }
+
+    async function fetchAndFilter() {
+        const listContainer = document.getElementById('commentList');
+        const statusText = document.querySelector('#status div:first-child');
+        const statusSummary = document.getElementById('status-summary');
+        
+        listContainer.innerHTML = '';
+        statusSummary.innerHTML = '';
+        
+        let totalFound = 0;
+        let totalLikes = 0;
+        let totalReplies = 0;
+
+        const updateUIStats = () => {
+            statusSummary.innerHTML = `累積讚數: ${totalLikes} | 累積回覆/被回覆數: ${totalReplies}`;
+        };
+
+        for (const item of bookIdQueue) {
+            let offset = 0;
+            let hasMore = true;
+            let lastPostId = "";
+            let limit = 400; 
+            const targetSearch = item.targetName;
+
+            while (hasMore) {
+                statusText.innerHTML = `🔍 正在搜尋 <b>${item.platform}</b> (${targetSearch}) 話次: ${item.id}...`;
+                try {
+                    const url = `http://localhost:3000/get-comments?bookId=${item.id}&limit=${limit}&platform=${item.platform}&offsetPostId=${lastPostId}&offset=${offset}`;
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error(`主留言獲取失敗: ${response.status}`);
+                    
+                    const data = await response.json();
+                    let comments = [];
+
+                    if (item.platform === 'webtoon' || item.platform === 'naver') {
+                        comments = data.result?.posts || [];
+                        if (comments.length > 0) {
+                            lastPostId = comments[comments.length - 1].id;
+                            hasMore = (comments.length === limit);
+                        } else { hasMore = false; }
+                    } else if (item.platform === 'ridi') {
+                        comments = data.serial_comment?.comments || [];
+                        hasMore = (comments.length === limit); 
+                    }
+                    
+                    const filtered = comments.filter(c => {
+                        const userName = (item.platform === 'webtoon' || item.platform === 'naver') ? c.createdBy?.name : c.user_id;
+                        return userName && (userName.startsWith(targetSearch) || userName === targetSearch);
+                    });
+                    
+                    filtered.forEach(c => {
+                        const m = getMetrics(c, item.platform);
+                        totalLikes += m.likes;
+                        totalReplies += m.replies;
+                    });
+
+
+                    // --- 修改這裡：使用 forEach 直接展開主留言內容 ---
+                    filtered.forEach(c => {
+                        const name = (item.platform === 'ridi') ? c.user_id : c.createdBy?.name;
+                        const body = (item.platform === 'ridi') ? c.content : c.body;
+                        const m = getMetrics(c, item.platform);
+                        // 直接印出一行清晰的字串
+                        console.log(`📌 [${item.platform} 主留言] 👤 ${name} : ${body}`);
+                    });
+
+                    
+                    totalFound += filtered.length;
+                    renderComments(filtered, item, listContainer);
+                    updateUIStats();
+                    
+                    // 深入處理回覆
+                    const matchedMainIds = filtered.map(c => (item.platform === 'ridi' ? c.comment_id : c.id));
+
+                    for (const post of comments) {
+                        const postId = (item.platform === 'ridi' ? post.comment_id : post.id);
+                        const postBody = (item.platform === 'ridi' ? post.content : post.body);
+                        const hasReplies = (item.platform === 'ridi' ? post.reply_count > 0 : post.childPostCount > 0);
+
+                        if (hasReplies) {
+                            try {
+                                const replyUrl = `http://localhost:3000/get-replies?postId=${postId}&limit=100&bookId=${item.id}&platform=${item.platform}`;
+                                const replyRes = await fetch(replyUrl);
+                                
+                                // 如果回覆請求失敗 (500)，跳過該則繼續，不中斷整個搜尋
+                                if (!replyRes.ok) {
+                                    console.warn(`跳過回覆抓取 (PostID: ${postId}): ${replyRes.status}`);
+                                    continue;
+                                }
+
+                                const replyData = await replyRes.json();
+                                
+                                let allReplies = [];
+                                if (item.platform === 'ridi') {
+                                    allReplies = replyData.serial_comment?.replies || [];
+                                } else {
+                                    allReplies = replyData.result?.posts || [];
+                                }
+
+                                // --- 修改這裡：使用 forEach 直接展開所有回覆內容 ---
+                                allReplies.forEach(r => {
+                                    const rName = (item.platform === 'ridi') ? r.user_id : r.createdBy?.name;
+                                    const rBody = r.content || r.body;
+                                    console.log(`   💬 [${item.platform} 回覆] 👤 ${rName} : ${rBody.substring(0, 50)}`);
+                                });
+
+
+                                const myReplies = allReplies.filter(r => {
+                                    const name = (item.platform === 'ridi' ? r.user_id : r.createdBy?.name || "");
+                                    return (name.startsWith(targetSearch) && !matchedMainIds.includes(postId));
+                                });
+
+                                if (myReplies.length > 0) {
+                                    renderComments([post], item, listContainer); 
+                                    myReplies.forEach(r => {
+                                        const m = getMetrics(r, item.platform);
+                                        totalLikes += m.likes;
+                                        totalReplies += m.replies;
+                                    });
+                                    totalFound += myReplies.length;
+                                    renderComments(myReplies, item, listContainer, postBody); 
+                                    updateUIStats();
+                                }
+
+                                if (matchedMainIds.includes(postId)) {
+                                    const othersReplies = allReplies.filter(r => {
+                                        const name = (item.platform === 'ridi' ? r.user_id : r.createdBy?.name || "");
+                                        return !name.startsWith(targetSearch); 
+                                    });
+                                    if (othersReplies.length > 0) {
+                                        totalFound += othersReplies.length;
+                                        renderComments(othersReplies, item, listContainer, postBody);
+                                        updateUIStats();
+                                    }
+                                }
+                            } catch (replyErr) {
+                                console.error(`回覆解析錯誤 (PostID: ${postId}):`, replyErr);
+                            }
+                        }
+                    }
+                    
+                    if (hasMore) {
+                        offset += limit;
+                        await new Promise(r => setTimeout(r, 1000));
+                    }
+                } catch (e) {
+                    console.error("主流程錯誤:", e);
+                    hasMore = false;
+                }
+            }
+        }
+        statusText.innerHTML = `✅ 搜尋結束，共找到 ${totalFound} 則相關評論。`;
+    }
+
+    function renderComments(list, item, container, parentBody = null) {
+        list.forEach(c => {
+            const card = document.createElement('div');
+            card.className = 'comment-card' + (parentBody ? ' reply-card' : '');
+            
+            const isWT = (item.platform === 'webtoon' || item.platform === 'naver');
+            const isBest = isWT ? (c.isTop || c.isPinned) : c.is_best;
+            const name = isWT ? c.createdBy?.name : c.user_id;
+            const body = isWT ? c.body : c.content;
+            const dateStr = isWT ? c.createdAt : c.created;
+            const date = new Date(dateStr).toLocaleString();
+            
+            const metrics = getMetrics(c, item.platform);
+
+            card.innerHTML = `
+                ${isBest ? '<div class="best-badge">BEST</div>' : ''}
+                ${parentBody ? `<div class="reply-hint">⤴ 回覆留言：「${parentBody.substring(0, 15)}...」</div>` : ''}
+                <div class="user-info">👤 ${name} <span class="platform-tag ${isWT ? 'wt-tag' : 'ridi-tag'}">${item.platform}</span></div>
+                <div class="content">${body}</div>
+                <div class="footer-metrics">
+                    <div class="metric-item">👍 ${metrics.likes}</div>
+                    ${isWT ? `<div class="metric-item">👎 ${metrics.dislikes}</div>` : ''}
+                    <div class="metric-item">💬 ${metrics.replies}</div>
+                    <div class="date">🕒 ${date}</div>
+                </div>
+            `;
+            container.appendChild(card);
+        });
+    }
+</script>
+</body>
+</html>

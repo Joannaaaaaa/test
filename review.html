@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>新增漫畫評論 - 編輯器</title>
+    <style>
+        :root { --primary: #3498db; --bg: #0f1218; --card-bg: #1a1d24; --text: #ecf0f1; }
+        body { font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
+        .nav { margin-bottom: 20px; }
+        .nav a { color: var(--primary); text-decoration: none; font-weight: bold; }
+        
+        .card { background: var(--card-bg); border-radius: 12px; padding: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); max-width: 650px; margin: auto; border: 1px solid #333; }
+        h2 { border-left: 4px solid var(--primary); padding-left: 10px; margin-top: 0; }
+
+        .field { margin-bottom: 20px; }
+        label { display: block; font-weight: bold; margin-bottom: 8px; color: #bdc3c7; font-size: 0.9rem; }
+        
+        input[type="text"], input[type="number"], textarea { 
+            width: 100%; padding: 12px; background: #0f1218; border: 1px solid #333; 
+            color: white; border-radius: 8px; box-sizing: border-box; font-family: inherit;
+        }
+        textarea { resize: vertical; }
+
+        .team-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+
+        .platform-selector { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 5px; }
+        .platform-option {
+            padding: 8px 15px; border-radius: 6px; cursor: pointer; border: 2px solid #444;
+            font-size: 0.85rem; transition: all 0.2s; background: #242831; color: #888; font-weight: bold;
+        }
+        .platform-option.selected {
+            border-color: var(--opt-color); color: var(--opt-color);
+            box-shadow: 0 0 10px var(--opt-color); text-shadow: 0 0 5px var(--opt-color);
+        }
+
+        .stars { display: flex; flex-direction: row-reverse; justify-content: flex-end; margin-top: 5px; }
+        .stars input { display: none; }
+        .stars label { font-size: 35px; color: #333; cursor: pointer; transition: color 0.2s; margin: 0 2px; }
+        .stars input:checked ~ label { color: #f1c40f; }
+        .stars label:hover, .stars label:hover ~ label { color: #f1c40f; }
+
+        .btn-group { display: flex; gap: 10px; margin-top: 30px; }
+        button { flex: 1; padding: 14px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 1rem; transition: opacity 0.2s; }
+        .btn-save { background: var(--primary); color: white; }
+        .btn-clear { background: #c0392b; color: white; }
+        button:hover { opacity: 0.8; }
+
+        .status { font-size: 12px; color: #555; margin-top: 15px; text-align: center; }
+    </style>
+</head>
+<body>
+
+<div class="nav">
+    <a href="index.html">← 返回收藏展</a>
+</div>
+
+<div class="card">
+    <h2>漫畫評論編輯</h2>
+    
+    <div class="field">
+        <label>漫畫名稱</label>
+        <input type="text" id="title" placeholder="例如：某天成為公主">
+    </div>
+
+    <div class="team-grid">
+        <div class="field"><label>原作</label><input type="text" id="author" placeholder="作者"></div>
+        <div class="field"><label>改編</label><input type="text" id="adapter" placeholder="腳本"></div>
+        <div class="field"><label>繪師</label><input type="text" id="artist" placeholder="作畫"></div>
+    </div>
+
+    <div class="field">
+        <label>發行平台 (多選)</label>
+        <div id="platformSelector" class="platform-selector"></div>
+    </div>
+
+    <div class="field">
+        <label>我的評分</label>
+        <div class="stars">
+            <input type="radio" id="star5" name="rating" value="5"><label for="star5">★</label>
+            <input type="radio" id="star4" name="rating" value="4"><label for="star4">★</label>
+            <input type="radio" id="star3" name="rating" value="3"><label for="star3">★</label>
+            <input type="radio" id="star2" name="rating" value="2"><label for="star2">★</label>
+            <input type="radio" id="star1" name="rating" value="1"><label for="star1">★</label>
+        </div>
+    </div>
+
+    <div class="field">
+        <label>私密評論區</label>
+        <textarea id="comment" rows="6" placeholder="寫下你的心得..."></textarea>
+    </div>
+
+    <div class="btn-group">
+        <!-- 修改按鈕：現在直接儲存至收藏展並跳轉 -->
+        <button class="btn-save" onclick="saveToGallery()">✅ 儲存並返回收藏展</button>
+        <button class="btn-clear" onclick="clearData()">🗑️ 清空重填</button>
+    </div>
+    
+    <div id="statusMsg" class="status">正在編輯草稿...</div>
+</div>
+
+<script>
+    const PLATFORM_CONFIG = {
+        "Ridibooks": "#00a0e9", "Kakao": "#ffcd00", "Naver": "#03cf5d",
+        "Bomtoon": "#ff4d6a", "Lezhin": "#ed1c24", "Comico": "#e60012"
+    };
+
+    let selectedPlatforms = [];
+
+    window.onload = () => {
+        initPlatformSelector();
+        loadDraft();
+    };
+
+    function initPlatformSelector() {
+        const container = document.getElementById('platformSelector');
+        Object.keys(PLATFORM_CONFIG).forEach(name => {
+            const opt = document.createElement('div');
+            opt.className = 'platform-option';
+            opt.innerText = name;
+            opt.style.setProperty('--opt-color', PLATFORM_CONFIG[name]);
+            opt.onclick = () => {
+                opt.classList.toggle('selected');
+                if (selectedPlatforms.includes(name)) {
+                    selectedPlatforms = selectedPlatforms.filter(p => p !== name);
+                } else {
+                    selectedPlatforms.push(name);
+                }
+            };
+            container.appendChild(opt);
+        });
+    }
+
+    // 核心功能：將資料合併至 gallery 快取並跳轉
+    function saveToGallery() {
+        const title = document.getElementById('title').value;
+        if (!title) return alert('請輸入漫畫名稱！');
+
+        // 1. 建立新的評論物件
+        const newReview = {
+            title: title,
+            author: document.getElementById('author').value,
+            adapter: document.getElementById('adapter').value,
+            artist: document.getElementById('artist').value,
+            platforms: selectedPlatforms,
+            comment: document.getElementById('comment').value,
+            rating: parseInt(document.querySelector('input[name="rating"]:checked')?.value || 0),
+            updatedAt: new Date().toLocaleString()
+        };
+
+        // 2. 讀取目前的 gallery 快取
+        let currentGallery = JSON.parse(localStorage.getItem('my_review_gallery') || "[]");
+        
+        // 3. 推入新資料[cite: 3]
+        currentGallery.push(newReview);
+        
+        // 4. 存回 LocalStorage 並清空草稿[cite: 3, 5]
+        localStorage.setItem('my_review_gallery', JSON.stringify(currentGallery));
+        localStorage.removeItem('comic_review_draft'); 
+        
+        // 5. 跳轉回展示頁面[cite: 3]
+        window.location.href = 'index.html';
+    }
+
+    function loadDraft() {
+        const saved = localStorage.getItem('comic_review_draft');
+        if (saved) {
+            const data = JSON.parse(saved);
+            document.getElementById('title').value = data.title || '';
+            document.getElementById('author').value = data.author || '';
+            document.getElementById('adapter').value = data.adapter || '';
+            document.getElementById('artist').value = data.artist || '';
+            document.getElementById('comment').value = data.comment || '';
+            selectedPlatforms = data.platforms || [];
+            if (data.rating) document.getElementById(`star${data.rating}`).checked = true;
+            document.querySelectorAll('.platform-option').forEach(opt => {
+                if (selectedPlatforms.includes(opt.innerText)) opt.classList.add('selected');
+            });
+        }
+    }
+
+    // 持續自動保存草稿 (預防意外關閉)[cite: 5]
+    document.addEventListener('input', () => {
+        const draft = {
+            title: document.getElementById('title').value,
+            author: document.getElementById('author').value,
+            adapter: document.getElementById('adapter').value,
+            artist: document.getElementById('artist').value,
+            platforms: selectedPlatforms,
+            comment: document.getElementById('comment').value,
+            rating: document.querySelector('input[name="rating"]:checked')?.value || 0
+        };
+        localStorage.setItem('comic_review_draft', JSON.stringify(draft));
+    });
+
+    function clearData() {
+        if (confirm('確定要清空嗎？')) {
+            localStorage.removeItem('comic_review_draft');
+            location.reload();
+        }
+    }
+</script>
+</body>
+</html>
