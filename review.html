@@ -3,14 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>新增漫畫評論 - 編輯器</title>
+    <title>新增漫畫</title>
     <style>
-        :root { --primary: #3498db; --bg: #0f1218; --card-bg: #1a1d24; --text: #ecf0f1; }
+        :root { 
+            --primary: #3498db; 
+            --bg: #0f1218; 
+            --card-bg: #1a1d24; 
+            --text: #ecf0f1; 
+            --status-ongoing: #2ecc71;
+            --status-completed: #3498db;
+            --status-paused: #95a5a6;
+        }
         body { font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
         .nav { margin-bottom: 20px; }
         .nav a { color: var(--primary); text-decoration: none; font-weight: bold; }
         
-        .card { background: var(--card-bg); border-radius: 12px; padding: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); max-width: 650px; margin: auto; border: 1px solid #333; }
+        .card { background: var(--card-bg); border-radius: 12px; padding: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); max-width: 650px; margin: auto; border: 1px solid #333; box-sizing: border-box; }
         h2 { border-left: 4px solid var(--primary); padding-left: 10px; margin-top: 0; }
 
         .field { margin-bottom: 20px; }
@@ -22,17 +30,11 @@
         }
         textarea { resize: vertical; }
 
-        .team-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+        .team-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 
-        .platform-selector { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 5px; }
-        .platform-option {
-            padding: 8px 15px; border-radius: 6px; cursor: pointer; border: 2px solid #444;
-            font-size: 0.85rem; transition: all 0.2s; background: #242831; color: #888; font-weight: bold;
-        }
-        .platform-option.selected {
-            border-color: var(--opt-color); color: var(--opt-color);
-            box-shadow: 0 0 10px var(--opt-color); text-shadow: 0 0 5px var(--opt-color);
-        }
+        .selector-group { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 5px; }
+        .select-option { padding: 8px 15px; border-radius: 6px; cursor: pointer; border: 2px solid #444; font-size: 0.85rem; transition: all 0.2s; background: #242831; color: #888; font-weight: bold; }
+        .select-option.selected { border-color: var(--opt-color, var(--primary)); color: var(--opt-color, #fff); box-shadow: 0 0 10px var(--opt-color, var(--primary)); text-shadow: 0 0 5px var(--opt-color, var(--primary)); background: transparent; }
 
         .stars { display: flex; flex-direction: row-reverse; justify-content: flex-end; margin-top: 5px; }
         .stars input { display: none; }
@@ -52,26 +54,49 @@
 <body>
 
 <div class="nav">
-    <a href="index.html">← 返回收藏展</a>
+    <a href="index.html">← 返回</a>
 </div>
 
 <div class="card">
-    <h2>漫畫評論編輯</h2>
+    <h2>新增漫畫</h2>
     
     <div class="field">
         <label>漫畫名稱</label>
         <input type="text" id="title" placeholder="例如：某天成為公主">
     </div>
 
+    <div class="field">
+        <label>閱讀狀態</label>
+        <div id="statusSelector" class="selector-group">
+            <div class="select-option" data-status="連載中" onclick="selectStatus('連載中')" style="--opt-color: var(--status-ongoing)">連載中</div>
+            <div class="select-option" data-status="已看完" onclick="selectStatus('已看完')" style="--opt-color: var(--status-completed)">已看完</div>
+            <div class="select-option" data-status="休刊" onclick="selectStatus('休刊')" style="--opt-color: var(--status-paused)">休刊</div>
+        </div>
+    </div>
+
+    <div class="field" id="updateDayField" style="display:none;">
+        <label>連載更新日</label>
+        <div id="daySelector" class="selector-group">
+            <div class="select-option" data-day="Mon" onclick="selectDay('Mon')">월</div>
+            <div class="select-option" data-day="Tue" onclick="selectDay('Tue')">화</div>
+            <div class="select-option" data-day="Wed" onclick="selectDay('Wed')">수</div>
+            <div class="select-option" data-day="Thu" onclick="selectDay('Thu')">목</div>
+            <div class="select-option" data-day="Fri" onclick="selectDay('Fri')">금</div>
+            <div class="select-option" data-day="Sat" onclick="selectDay('Sat')">토</div>
+            <div class="select-option" data-day="Sun" onclick="selectDay('Sun')">일</div>
+        </div>
+    </div>
+
     <div class="team-grid">
-        <div class="field"><label>原作</label><input type="text" id="author" placeholder="作者"></div>
-        <div class="field"><label>改編</label><input type="text" id="adapter" placeholder="腳本"></div>
-        <div class="field"><label>繪師</label><input type="text" id="artist" placeholder="作畫"></div>
+        <div class="field"><label>원작</label><input type="text" id="author" placeholder="원작"></div>
+        <div class="field"><label>글</label><input type="text" id="adapter" placeholder="글"></div>
+        <div class="field"><label>그림</label><input type="text" id="artist" placeholder="그림"></div>
+        <div class="field"><label>다른 직원</label><input type="text" id="other" placeholder="다른 직원"></div>
     </div>
 
     <div class="field">
-        <label>發行平台 (多選)</label>
-        <div id="platformSelector" class="platform-selector"></div>
+        <label>發行平台</label>
+        <div id="platformSelector" class="selector-group"></div>
     </div>
 
     <div class="field">
@@ -86,29 +111,28 @@
     </div>
 
     <div class="field">
-        <label>私密評論區</label>
+        <label>評論</label>
         <textarea id="comment" rows="6" placeholder="寫下你的心得..."></textarea>
     </div>
 
     <div class="btn-group">
-        <!-- 修改按鈕：現在直接儲存至收藏展並跳轉 -->
-        <button class="btn-save" onclick="saveToGallery()">✅ 儲存並返回收藏展</button>
-        <button class="btn-clear" onclick="clearData()">🗑️ 清空重填</button>
+        <button class="btn-save" onclick="saveToGallery()">儲存</button>
+        <button class="btn-clear" onclick="clearData()">清空</button>
     </div>
     
     <div id="statusMsg" class="status">正在編輯草稿...</div>
 </div>
 
 <script>
-    const PLATFORM_CONFIG = {
-        "Ridibooks": "#00a0e9", "Kakao": "#ffcd00", "Naver": "#03cf5d",
-        "Bomtoon": "#ff4d6a", "Lezhin": "#ed1c24", "Comico": "#e60012"
-    };
+    const PLATFORM_CONFIG = { "Ridibooks": "#00a0e9", "Kakao": "#ffcd00", "Naver": "#03cf5d", "Bomtoon": "#ff4d6a", "Lezhin": "#ed1c24", "Comico": "#e60012" };
 
     let selectedPlatforms = [];
+    let selectedStatusValue = "連載中";
+    let selectedUpdateDay = "";
 
     window.onload = () => {
         initPlatformSelector();
+        selectStatus(selectedStatusValue);
         loadDraft();
     };
 
@@ -116,7 +140,7 @@
         const container = document.getElementById('platformSelector');
         Object.keys(PLATFORM_CONFIG).forEach(name => {
             const opt = document.createElement('div');
-            opt.className = 'platform-option';
+            opt.className = 'select-option';
             opt.innerText = name;
             opt.style.setProperty('--opt-color', PLATFORM_CONFIG[name]);
             opt.onclick = () => {
@@ -126,39 +150,54 @@
                 } else {
                     selectedPlatforms.push(name);
                 }
+                saveDraftTrigger();
             };
             container.appendChild(opt);
         });
     }
 
-    // 核心功能：將資料合併至 gallery 快取並跳轉
+    function selectStatus(statusText) {
+        selectedStatusValue = statusText;
+        document.querySelectorAll('#statusSelector .select-option').forEach(opt => {
+            opt.classList.toggle('selected', opt.getAttribute('data-status') === statusText);
+        });
+        document.getElementById('updateDayField').style.display = (statusText === '連載中') ? 'block' : 'none';
+        saveDraftTrigger();
+    }
+
+    function selectDay(dayCode) {
+        selectedUpdateDay = selectedUpdateDay === dayCode ? "" : dayCode;
+        document.querySelectorAll('#daySelector .select-option').forEach(opt => {
+            opt.classList.toggle('selected', opt.getAttribute('data-day') === selectedUpdateDay);
+        });
+        saveDraftTrigger();
+    }
+
     function saveToGallery() {
         const title = document.getElementById('title').value;
         if (!title) return alert('請輸入漫畫名稱！');
 
-        // 1. 建立新的評論物件
         const newReview = {
             title: title,
+            status: selectedStatusValue,
+            updateDay: selectedStatusValue === '連載中' ? selectedUpdateDay : '', 
             author: document.getElementById('author').value,
             adapter: document.getElementById('adapter').value,
             artist: document.getElementById('artist').value,
+            other: document.getElementById('other').value,
             platforms: selectedPlatforms,
             comment: document.getElementById('comment').value,
             rating: parseInt(document.querySelector('input[name="rating"]:checked')?.value || 0),
             updatedAt: new Date().toLocaleString()
         };
 
-        // 2. 讀取目前的 gallery 快取
         let currentGallery = JSON.parse(localStorage.getItem('my_review_gallery') || "[]");
-        
-        // 3. 推入新資料[cite: 3]
         currentGallery.push(newReview);
         
-        // 4. 存回 LocalStorage 並清空草稿[cite: 3, 5]
         localStorage.setItem('my_review_gallery', JSON.stringify(currentGallery));
-        localStorage.removeItem('comic_review_draft'); 
+        localStorage.removeItem('comic_review_draft');
         
-        // 5. 跳轉回展示頁面[cite: 3]
+        // 移除自動下載暗號
         window.location.href = 'index.html';
     }
 
@@ -170,28 +209,38 @@
             document.getElementById('author').value = data.author || '';
             document.getElementById('adapter').value = data.adapter || '';
             document.getElementById('artist').value = data.artist || '';
+            document.getElementById('other').value = data.other || '';
             document.getElementById('comment').value = data.comment || '';
+            
+            if (data.status) { selectStatus(data.status); }
+            if (data.updateDay) { selectDay(data.updateDay); }
+            
             selectedPlatforms = data.platforms || [];
             if (data.rating) document.getElementById(`star${data.rating}`).checked = true;
-            document.querySelectorAll('.platform-option').forEach(opt => {
+            
+            document.querySelectorAll('#platformSelector .select-option').forEach(opt => {
                 if (selectedPlatforms.includes(opt.innerText)) opt.classList.add('selected');
             });
         }
     }
 
-    // 持續自動保存草稿 (預防意外關閉)[cite: 5]
-    document.addEventListener('input', () => {
+    function saveDraftTrigger() {
         const draft = {
             title: document.getElementById('title').value,
+            status: selectedStatusValue,
+            updateDay: selectedUpdateDay,
             author: document.getElementById('author').value,
             adapter: document.getElementById('adapter').value,
             artist: document.getElementById('artist').value,
+            other: document.getElementById('other').value,
             platforms: selectedPlatforms,
             comment: document.getElementById('comment').value,
             rating: document.querySelector('input[name="rating"]:checked')?.value || 0
         };
         localStorage.setItem('comic_review_draft', JSON.stringify(draft));
-    });
+    }
+
+    document.addEventListener('input', saveDraftTrigger);
 
     function clearData() {
         if (confirm('確定要清空嗎？')) {
